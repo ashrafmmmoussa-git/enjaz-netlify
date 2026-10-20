@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>إدارة إنجاز</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232a1a1f'/%3E%3Cpath d='M9 17l5 5 9-11' stroke='%23fff' stroke-width='3' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Readex+Pro:wght@500;600;700&family=IBM+Plex+Sans+Arabic:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="/styles.css">
+<style>
+  .admin-cols{display:grid;gap:16px}
+  @media(min-width:820px){.admin-cols.with-form{grid-template-columns:320px minmax(0,1fr)}}
+  .toggle,.del{background:none;border:0;font-weight:600;padding:0;color:var(--accent)}
+  .toggle{color:var(--ink)}
+  .status.off{background:var(--line);color:var(--muted)}
+</style>
+</head>
+<body class="is-admin">
+<header class="bar">
+  <div class="wrap">
+    <div class="brand">
+      <svg width="30" height="30" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="currentColor"/><path d="M9 17l5 5 9-11" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      إدارة إنجاز <small>لوحة فريق المنصة</small>
+    </div>
+    <nav><button id="logout" hidden>خروج</button></nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <section id="v-login">
+    <form class="card login" id="login-form" novalidate>
+      <div><h1>دخول الإدارة</h1><p class="hint" style="margin:6px 0 0">هذه الصفحة لفريق منصة إنجاز فقط.</p></div>
+      <div class="field"><label for="pw">كلمة المرور</label><input id="pw" type="password" autocomplete="current-password"></div>
+      <div class="err" id="l-err"></div>
+      <button class="btn" type="submit" id="l-submit">دخول</button>
+    </form>
+  </section>
+
+  <section id="v-admin" hidden>
+    <div class="hello"><div><p class="hint" style="margin:0">لوحة التحكم</p><h1>إدارة إنجاز</h1></div></div>
+    <div class="kpis" id="kpis"></div>
+    <div class="tabs" role="group" aria-label="الجداول">
+      <button class="chip" data-tab="services">الخدمات</button>
+      <button class="chip" data-tab="technicians">الفنيون</button>
+      <button class="chip" data-tab="customers">العملاء</button>
+      <button class="chip" data-tab="orders">الطلبات</button>
+      <button class="chip" data-tab="ratings">التقييمات</button>
+    </div>
+    <div class="admin-cols" id="cols">
+      <form class="card panel" id="a-form" novalidate hidden>
+        <h2 style="font-size:18px">إضافة فني</h2>
+        <div class="field"><label for="a-name">اسم الفني</label><input id="a-name" placeholder="مثال: خالد للتكييف"></div>
+        <div class="field"><label for="a-svc">الخدمة</label><select id="a-svc"></select></div>
+        <div class="field"><label for="a-phone">رقم واتساب الفني</label>
+          <div class="phone"><span>+974</span><input id="a-phone" inputmode="numeric" maxlength="8" placeholder="3312 4567"></div></div>
+        <div class="err" id="a-err"></div>
+        <button class="btn" type="submit" id="a-submit">إضافة الفني</button>
+      </form>
+      <div class="card panel" style="min-width:0">
+        <p class="hint" style="margin:0" id="caption"></p>
+        <div class="tbl-wrap" id="table"></div>
+      </div>
+    </div>
+  </section>
+</main>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const fmt=v=>v==null?"—":Number(v).toFixed(1);
+const showPhone=p=>p? "+974 "+String(p).slice(0,4)+" "+String(p).slice(4) : "—";
+const fmtDate=ts=>ts? new Date(ts).toLocaleDateString("ar-QA",{day:"numeric",month:"short",year:"numeric"}) : "—";
+function toast(m){const t=$("#toast");t.textContent=m;t.hidden=false;clearTimeout(toast.h);toast.h=setTimeout(()=>t.hidden=true,2600);}
+
+const TKEY="enjaz-admin"; let TOKEN=null;
+try{TOKEN=sessionStorage.getItem(TKEY);}catch(e){}
+const setToken=t=>{TOKEN=t;try{t?sessionStorage.setItem(TKEY,t):sessionStorage.removeItem(TKEY);}catch(e){}};
+
+async function api(path,{method="GET",body}={}){
+  const headers={"content-type":"application/json"};
+  if(TOKEN) headers.authorization="Bearer "+TOKEN;
+  let res;
+  try{ res=await fetch("/api/admin/"+path,{method,headers,body:body?JSON.stringify(body):undefined}); }
+  catch(e){ throw new Error("تعذّر الاتصال بالخادم."); }
+  const data=await res.json().catch(()=>({}));
+  if(res.status===401&&path!=="login"){ setToken(null); show(); }
+  if(!res.ok) throw new Error(data.error||"حدث خطأ غير متوقع.");
+  return data;
+}
+
+let tab="technicians", DATA={}, SERVICES=[];
+function show(){
+  $("#v-login").hidden=!!TOKEN; $("#v-admin").hidden=!TOKEN; $("#logout").hidden=!TOKEN;
+  if(TOKEN) refresh();
+}
+$("#logout").onclick=()=>{setToken(null);show();};
+$("#login-form").onsubmit=async e=>{
+  e.preventDefault(); $("#l-err").textContent=""; $("#l-submit").disabled=true;
+  try{ const r=await api("login",{method:"POST",body:{password:$("#pw").value}}); setToken(r.token); $("#pw").value=""; show(); }
+  catch(err){ $("#l-err").textContent=err.message; }
+  finally{ $("#l-submit").disabled=false; }
+};
+
+async function refresh(){
+  try{
+    const [sum, services, rows] = await Promise.all([api("summary"), api("services"), tab==="services"?null:api(tab)]);
+    SERVICES=services; DATA[tab]= tab==="services"? services : rows;
+    $("#kpis").innerHTML=[["الخدمات المفعّلة",sum.services],["الفنيون النشطون",sum.technicians],["العملاء",sum.customers],["طلبات قيد الاتفاق",sum.pending],["التقييمات",sum.ratings]]
+      .map(([l,v])=>`<div class="kpi"><span>${l}</span><b>${v}</b></div>`).join("");
+    $("#a-svc").innerHTML=SERVICES.map(s=>`<option value="${s.id}">${esc(s.name_ar)}</option>`).join("");
+    renderTable();
+  }catch(err){ if(TOKEN) toast(err.message); }
+}
+document.querySelectorAll("[data-tab]").forEach(b=>b.onclick=()=>{tab=b.dataset.tab;renderTable(true);refresh();});
+
+const pill=(on,a,b)=>`<span class="status ${on?"done":"off"}">${on?a:b}</span>`;
+function table(head,rows,empty){
+  return rows.length? `<table><thead><tr>${head.map(h=>`<th>${h}</th>`).join("")}</tr></thead><tbody>${rows.join("")}</tbody></table>` : `<div class="empty">${empty}</div>`;
+}
+function renderTable(loading){
+  document.querySelectorAll("[data-tab]").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.tab===tab)));
+  $("#a-form").hidden = tab!=="technicians";
+  $("#cols").classList.toggle("with-form", tab==="technicians");
+  const d=DATA[tab];
+  if(loading||!d){ $("#table").innerHTML=`<div class="loading">جارٍ التحميل…</div>`; return; }
+  const caps={
+    services:"الخدمات الظاهرة في الشاشة الرئيسية. إيقاف خدمة يخفيها عن العملاء.",
+    technicians:"المتوسطات تُحسب من جدول التقييمات. الفني الذي له طلبات يُوقف ولا يُحذف.",
+    customers:"يُسجَّل العميل عند دخوله برقم واتساب.",
+    orders:"يُنشأ الطلب تلقائياً عند ضغط العميل على «تواصل عبر واتساب». آخر 500 طلب.",
+    ratings:"تقييم واحد لكل طلب مكتمل، من 1 (لا أوافق بشدة) إلى 5 (أوافق بشدة)."};
+  $("#caption").textContent=caps[tab];
+  const H={
+    services:()=>table(["الرمز","الخدمة","الوصف","الفنيون","الحالة",""],d.map(s=>`<tr><td dir="ltr">${esc(s.code)}</td><td>${esc(s.name_ar)}</td><td>${esc(s.description)}</td><td class="num">${s.technicians}</td><td>${pill(s.is_active,"مفعّلة","موقوفة")}</td><td><button class="toggle" data-toggle="services/${s.id}" data-on="${!s.is_active}">${s.is_active?"إيقاف":"تفعيل"}</button></td></tr>`),"لا توجد خدمات."),
+    technicians:()=>table(["الفني","الخدمة","واتساب","التكلفة","الجودة","الاستجابة","التقييمات","الطلبات","الحالة",""],d.map(t=>`<tr><td>${esc(t.name)}</td><td>${esc(t.service_name)}</td><td class="num" dir="ltr">${showPhone(t.whatsapp)}</td><td class="num">${fmt(t.avg_cost)}</td><td class="num">${fmt(t.avg_quality)}</td><td class="num">${fmt(t.avg_speed)}</td><td class="num">${t.ratings}</td><td class="num">${t.orders}</td><td>${pill(t.is_active,"نشط","موقوف")}</td>
+      <td><button class="toggle" data-toggle="technicians/${t.id}" data-on="${!t.is_active}">${t.is_active?"إيقاف":"تفعيل"}</button>${t.orders?"":` · <button class="del" data-del="${t.id}">حذف</button>`}</td></tr>`),"لم يُضف أي فني بعد. أضف أول فني من النموذج."),
+    customers:()=>table(["واتساب","الاسم","أول تسجيل","آخر دخول","الطلبات"],d.map(c=>`<tr><td class="num" dir="ltr">${showPhone(c.whatsapp)}</td><td>${esc(c.name)||"—"}</td><td>${fmtDate(c.created_at)}</td><td>${fmtDate(c.last_login_at)}</td><td class="num">${c.orders}</td></tr>`),"لم يسجّل أي عميل بعد."),
+    orders:()=>table(["التاريخ","العميل","الفني","الخدمة","الحالة","التكلفة","الإغلاق"],d.map(o=>`<tr><td>${fmtDate(o.created_at)}</td><td><span dir="ltr">${showPhone(o.customer_whatsapp)}</span>${o.customer_name?" · "+esc(o.customer_name):""}</td><td>${esc(o.technician_name)}</td><td>${esc(o.service_name)}</td><td>${o.status==="pending"?'<span class="status pending">قيد الاتفاق</span>':o.status==="completed"?'<span class="status done">مكتملة</span>':'<span class="status off">ملغاة</span>'}</td><td class="num">${o.cost!=null?o.cost+" ر.ق":"—"}</td><td>${fmtDate(o.completed_at)}</td></tr>`),"لم يُنشأ أي طلب بعد."),
+    ratings:()=>table(["التاريخ","الفني","الخدمة","العميل","التكلفة","الجودة","الاستجابة"],d.map(r=>`<tr><td>${fmtDate(r.created_at)}</td><td>${esc(r.technician_name)}</td><td>${esc(r.service_name)}</td><td class="num" dir="ltr">${showPhone(r.customer_whatsapp)}</td><td class="num">${r.cost_score}</td><td class="num">${r.quality_score}</td><td class="num">${r.speed_score}</td></tr>`),"لا توجد تقييمات بعد.")
+  };
+  $("#table").innerHTML=H[tab]();
+}
+
+$("#table").addEventListener("click",async e=>{
+  const tg=e.target.closest("[data-toggle]"), del=e.target.closest("[data-del]");
+  try{
+    if(tg){ tg.disabled=true; await api(tg.dataset.toggle,{method:"PATCH",body:{isActive:tg.dataset.on==="true"}}); toast("تم التحديث"); refresh(); }
+    if(del){
+      if(del.dataset.confirm!=="1"){del.dataset.confirm="1";del.textContent="تأكيد الحذف؟";return;}
+      del.disabled=true; await api("technicians/"+del.dataset.del,{method:"DELETE"}); toast("حُذف الفني"); refresh();
+    }
+  }catch(err){ toast(err.message); refresh(); }
+});
+
+$("#a-phone").addEventListener("input",e=>e.target.value=e.target.value.replace(/\D/g,""));
+$("#a-form").onsubmit=async e=>{
+  e.preventDefault();
+  const name=$("#a-name").value.trim(), serviceId=$("#a-svc").value, whatsapp=$("#a-phone").value.trim();
+  if(!name) return $("#a-err").textContent="اكتب اسم الفني.";
+  if(!/^[3567]\d{7}$/.test(whatsapp)) return $("#a-err").textContent="رقم واتساب غير صحيح. 8 أرقام تبدأ بـ 3 أو 5 أو 6 أو 7.";
+  $("#a-err").textContent=""; $("#a-submit").disabled=true;
+  try{ await api("technicians",{method:"POST",body:{name,serviceId,whatsapp}}); $("#a-form").reset(); toast("أُضيف "+name); refresh(); }
+  catch(err){ $("#a-err").textContent=err.message; }
+  finally{ $("#a-submit").disabled=false; }
+};
+
+show();
+</script>
+</body>
+</html>

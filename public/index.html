@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>منصة إنجاز</title>
+<meta name="description" content="إنجاز: اعثر على فني تكييف أو سباكة أو كهرباء أو نجارة في قطر، مرتّبين حسب تقييمات العملاء، وتواصل معه عبر واتساب.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%238a1538'/%3E%3Cpath d='M9 17l5 5 9-11' stroke='%23fff' stroke-width='3' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Readex+Pro:wght@500;600;700&family=IBM+Plex+Sans+Arabic:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<header class="bar">
+  <div class="wrap">
+    <a class="brand" href="/" style="text-decoration:none">
+      <svg width="30" height="30" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="currentColor"/><path d="M9 17l5 5 9-11" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      إنجاز <small>صيانة منزلية في قطر</small>
+    </a>
+    <nav id="nav">
+      <button data-go="home" id="nav-home">الخدمات</button>
+      <button data-go="mine" id="nav-mine">طلباتي</button>
+      <button id="login-btn">دخول</button>
+      <button id="logout" hidden>خروج</button>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="notice" id="net-notice" hidden></div>
+
+  <section id="v-login" hidden>
+    <form class="card login" id="login-form" novalidate>
+      <div>
+        <h1>سجّل برقم واتساب</h1>
+        <p class="hint" style="margin:6px 0 0" id="l-ctx"></p>
+      </div>
+      <div class="field">
+        <label for="l-name">الاسم <span class="hint">(اختياري)</span></label>
+        <input id="l-name" autocomplete="name" placeholder="مثال: محمد الكواري">
+      </div>
+      <div class="field">
+        <label for="l-phone">رقم واتساب</label>
+        <div class="phone"><span>+974</span><input id="l-phone" inputmode="numeric" maxlength="8" placeholder="5512 3456" autocomplete="tel-national"></div>
+        <div class="hint">8 أرقام تبدأ بـ 3 أو 5 أو 6 أو 7</div>
+      </div>
+      <label class="check" for="l-remember"><input type="checkbox" id="l-remember" checked> تذكرني على هذا الجهاز</label>
+      <div class="err" id="l-err"></div>
+      <div class="row"><button class="btn" type="submit" id="l-submit" style="flex:1">دخول</button><button class="btn ghost" type="button" id="l-cancel">رجوع</button></div>
+    </form>
+  </section>
+
+  <section id="v-home" hidden>
+    <div class="hello">
+      <div>
+        <p class="hint" style="margin:0" id="hello-name"></p>
+        <h1>ما الخدمة التي تحتاجها؟</h1>
+      </div>
+    </div>
+    <div class="services" id="services"></div>
+    <div id="home-pend" hidden>
+      <div class="section-h"><h2>طلبات قيد الاتفاق</h2><button class="btn ghost" data-go="mine">كل الطلبات</button></div>
+      <div class="reqs" id="home-reqs"></div>
+    </div>
+  </section>
+
+  <section id="v-list" hidden>
+    <button class="back" data-go="home">→ كل الخدمات</button>
+    <div class="list-head">
+      <div><p class="hint" style="margin:0" id="list-count"></p><h1 id="list-title"></h1></div>
+      <div class="sort" role="group" aria-label="ترتيب الفنيين">
+        <span>رتّب حسب:</span>
+        <button class="chip" data-sort="cost">التكلفة</button>
+        <button class="chip" data-sort="quality">الجودة</button>
+        <button class="chip" data-sort="speed">سرعة الاستجابة</button>
+      </div>
+    </div>
+    <div id="resume"></div>
+    <div class="techs" id="techs"></div>
+  </section>
+
+  <section id="v-mine" hidden>
+    <div class="hello"><h1>طلباتي</h1></div>
+    <p class="hint" style="margin-top:-8px">بعد انتهاء الفني من العمل اضغط على «قيد الاتفاق» لتسجيل التكلفة والتقييم.</p>
+    <div class="reqs" id="mine-reqs"></div>
+  </section>
+</main>
+
+<div class="overlay" id="rate" hidden>
+  <form class="card modal" id="rate-form" novalidate role="dialog" aria-modal="true" aria-labelledby="rate-h">
+    <div>
+      <h2 id="rate-h" style="font-size:20px">تقييم الخدمة</h2>
+      <p class="hint" style="margin:4px 0 0" id="rate-sub"></p>
+    </div>
+    <div class="field"><label for="r-cost">التكلفة بالريال القطري</label><input id="r-cost" type="number" min="0" inputmode="decimal" placeholder="مثال: 250"></div>
+    <div id="likerts"></div>
+    <div class="err" id="r-err"></div>
+    <div class="row"><button class="btn" type="submit" id="r-submit">حفظ التقييم وإغلاق الطلب</button><button class="btn ghost" type="button" id="r-cancel">إلغاء</button></div>
+  </form>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+const ICONS = {
+  ac:'<path d="M20 4v32M6 12l28 16M6 28l28-16M16 6l4 4 4-4M16 34l4-4 4 4" stroke="currentColor" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>',
+  plumb:'<path d="M6 12h14a6 6 0 0 1 6 6v6M26 24h6v6h-12v-6h6M6 8v8" stroke="currentColor" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M26 33c0 2-1.5 3.5-3 3.5S20 35 20 33c0-1.5 3-5 3-5s3 3.5 3 5z" fill="currentColor"/>',
+  elec:'<path d="M23 4L9 23h10l-3 13 15-20H21z" stroke="currentColor" stroke-width="2.4" fill="none" stroke-linejoin="round"/>',
+  carp:'<path d="M5 30l17-17 5 5-17 17H5z M22 13l4-4a2.5 2.5 0 0 1 3.5 0l1.5 1.5a2.5 2.5 0 0 1 0 3.5l-4 4" stroke="currentColor" stroke-width="2.4" fill="none" stroke-linejoin="round"/><path d="M9 26l2 2M13 22l2 2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
+  _:'<circle cx="20" cy="20" r="13" stroke="currentColor" stroke-width="2.4" fill="none"/><path d="M14 20l4 4 8-9" stroke="currentColor" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>'
+};
+const CRIT = {cost:"التكلفة", quality:"الجودة", speed:"سرعة الاستجابة"};
+const FIELD = {cost:"avgCost", quality:"avgQuality", speed:"avgSpeed"};
+const STATEMENTS = {cost:"كانت التكلفة مناسبة", quality:"كانت جودة العمل ممتازة", speed:"استجاب الفني بسرعة"};
+const waIcon='<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2zm5.2 13.9c-.2.6-1.3 1.2-1.8 1.2-.5.1-1 .2-3.3-.7-2.8-1.1-4.5-3.9-4.7-4.1-.1-.2-1.1-1.5-1.1-2.8s.7-2 1-2.3c.2-.3.5-.3.7-.3h.5c.2 0 .4 0 .6.5l.8 2c.1.2.1.4 0 .5l-.4.6-.4.4c-.1.1-.3.3-.1.6.2.3.8 1.3 1.7 2.1 1.2 1 2.1 1.3 2.4 1.5.3.1.5.1.6-.1l.9-1c.2-.3.4-.2.6-.1l1.9.9c.3.1.5.2.5.3.1.2.1.7-.1 1.3z"/></svg>';
+
+/* ---------- helpers ---------- */
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const fmt=v=>v==null?"—":Number(v).toFixed(1);
+const validPhone=p=>/^[3567]\d{7}$/.test(p);
+const showPhone=p=>p? "+974 "+String(p).slice(0,4)+" "+String(p).slice(4) : "—";
+const fmtDate=ts=>ts? new Date(ts).toLocaleDateString("ar-QA",{day:"numeric",month:"long"}) : "—";
+const svcIcon=k=>`<svg viewBox="0 0 40 40" aria-hidden="true">${ICONS[k]||ICONS._}</svg>`;
+function toast(m){const t=$("#toast");t.textContent=m;t.hidden=false;clearTimeout(toast.h);toast.h=setTimeout(()=>t.hidden=true,2600);}
+
+/* ---------- session: «تذكرني» → localStorage، وإلا هذه الجلسة فقط ---------- */
+const SKEY="enjaz-session"; let SESSION=null; // {token, customer}
+try{SESSION=JSON.parse(localStorage.getItem(SKEY)||sessionStorage.getItem(SKEY)||"null");}catch(e){}
+function setSession(s,remember){
+  SESSION=s;
+  try{localStorage.removeItem(SKEY);sessionStorage.removeItem(SKEY);
+    if(s)(remember?localStorage:sessionStorage).setItem(SKEY,JSON.stringify(s));}catch(e){}
+}
+
+/* ---------- API ---------- */
+async function api(path,{method="GET",body,auth=false,keepalive=false}={}){
+  const headers={"content-type":"application/json"};
+  if(auth&&SESSION) headers.authorization="Bearer "+SESSION.token;
+  let res;
+  try{ res=await fetch("/api/"+path,{method,headers,body:body?JSON.stringify(body):undefined,keepalive}); }
+  catch(e){ throw new Error("تعذّر الاتصال بالخادم. تحقق من الإنترنت."); }
+  const data=await res.json().catch(()=>({}));
+  if(res.status===401&&auth){ setSession(null); render(); }
+  if(!res.ok) throw new Error(data.error||"حدث خطأ غير متوقع.");
+  return data;
+}
+
+/* ---------- state ---------- */
+let SERVICES=null, TECHS=null, ORDERS=[];
+let state={view:"home", svc:null, sort:"cost", rateId:null, pendingTech:null, resumeTech:null, after:"home"};
+
+async function loadServices(){
+  try{ SERVICES=await api("services"); $("#net-notice").hidden=true; }
+  catch(e){ SERVICES=[]; $("#net-notice").textContent=e.message; $("#net-notice").hidden=false; }
+  render();
+}
+async function loadTechs(){
+  TECHS=null; renderList();
+  try{ TECHS=await api(`technicians?service=${encodeURIComponent(state.svc)}&sort=${state.sort}`); }
+  catch(e){ TECHS=[]; toast(e.message); }
+  renderList();
+}
+async function loadOrders(){
+  if(!SESSION){ ORDERS=[]; return render(); }
+  try{ ORDERS=await api("me/orders",{auth:true}); }catch(e){ ORDERS=[]; }
+  render();
+}
+
+/* ---------- routing ---------- */
+function go(v){
+  if(v==="mine" && !SESSION){ state.after="mine"; state.pendingTech=null; v="login"; }
+  if(v!=="list") state.resumeTech=null;
+  state.view=v;
+  ["login","home","list","mine"].forEach(k=>$("#v-"+k).hidden = k!==v);
+  ["home","mine"].forEach(k=>$("#nav-"+k).setAttribute("aria-current", String(k===v || (k==="home"&&v==="list"))));
+  render(); window.scrollTo(0,0);
+}
+document.addEventListener("click",e=>{const b=e.target.closest("[data-go]"); if(b) go(b.dataset.go);});
+$("#logout").onclick=()=>{setSession(null);ORDERS=[];go("home");toast("سجّلت الخروج");};
+$("#login-btn").onclick=()=>{state.after="home";state.pendingTech=null;go("login");};
+$("#l-cancel").onclick=()=>{const t=state.pendingTech;state.pendingTech=null;go(t?"list":"home");};
+
+/* ---------- login ---------- */
+$("#l-phone").addEventListener("input",e=>e.target.value=e.target.value.replace(/\D/g,""));
+$("#login-form").onsubmit=async e=>{
+  e.preventDefault();
+  const name=$("#l-name").value.trim(), whatsapp=$("#l-phone").value.trim(), remember=$("#l-remember").checked;
+  if(!validPhone(whatsapp)) return $("#l-err").textContent="رقم واتساب غير صحيح. يجب أن يكون 8 أرقام ويبدأ بـ 3 أو 5 أو 6 أو 7.";
+  $("#l-err").textContent=""; $("#l-submit").disabled=true;
+  try{
+    const s=await api("login",{method:"POST",body:{whatsapp,name,remember}});
+    setSession(s,remember); loadOrders();
+    const t=state.pendingTech; state.pendingTech=null;
+    if(t){ go("list"); state.resumeTech=t; renderList(); } else go(state.after||"home");
+    toast("تم تسجيل الدخول");
+  }catch(err){ $("#l-err").textContent=err.message; }
+  finally{ $("#l-submit").disabled=false; }
+};
+
+/* ---------- render ---------- */
+function render(){
+  $("#login-btn").hidden=!!SESSION; $("#logout").hidden=!SESSION;
+  if(state.view==="login") renderLogin();
+  if(state.view==="home") renderHome();
+  if(state.view==="list") renderList();
+  if(state.view==="mine") renderReqs($("#mine-reqs"), ORDERS);
+}
+function renderLogin(){
+  const t=state.pendingTech && (TECHS||[]).find(x=>x.id===state.pendingTech);
+  $("#l-ctx").textContent = t
+    ? "سجّل رقمك أولاً لتتواصل مع "+t.name+". هذه الخطوة مرة واحدة فقط."
+    : "نستخدم رقمك لربط طلبات الصيانة بحسابك، ويتواصل معك الفني عبره.";
+}
+function renderHome(){
+  const c=SESSION?.customer;
+  $("#hello-name").textContent = c ? (c.name? "أهلاً "+c.name : "أهلاً بك") : "صيانة منزلية في قطر";
+  $("#services").innerHTML = SERVICES===null
+    ? `<div class="card loading" style="grid-column:1/-1">جارٍ تحميل الخدمات…</div>`
+    : SERVICES.length ? SERVICES.map(s=>`<button class="svc" data-svc="${esc(s.code)}">${svcIcon(s.code)}<b>${esc(s.name_ar)}</b><span>${esc(s.description)}</span></button>`).join("")
+    : `<div class="card empty" style="grid-column:1/-1">لا توجد خدمات متاحة حالياً.</div>`;
+  const pend=ORDERS.filter(o=>o.status==="pending");
+  $("#home-pend").hidden=!pend.length;
+  if(pend.length) renderReqs($("#home-reqs"), pend);
+}
+$("#services").addEventListener("click",e=>{const b=e.target.closest("[data-svc]"); if(!b)return; state.svc=b.dataset.svc; state.sort="cost"; go("list"); loadTechs();});
+
+function renderList(){
+  const s=(SERVICES||[]).find(x=>x.code===state.svc);
+  $("#list-title").textContent="فنيو "+(s?.name_ar||"");
+  $("#list-count").textContent=TECHS? TECHS.length+" فني متاح" : "جارٍ التحميل";
+  document.querySelectorAll("[data-sort]").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.sort===state.sort)));
+  const rt=state.resumeTech && (TECHS||[]).find(x=>x.id===state.resumeTech);
+  $("#resume").innerHTML = rt ? `<div class="card resume"><p>تم تسجيلك. تابع التواصل مع ${esc(rt.name)}</p>
+    <a class="btn wa" href="https://wa.me/974${esc(rt.whatsapp)}" target="_blank" rel="noopener" data-contact="${esc(rt.id)}">${waIcon} فتح واتساب</a></div>` : "";
+  if(!TECHS){ $("#techs").innerHTML=`<div class="card loading">جارٍ تحميل الفنيين…</div>`; return; }
+  $("#techs").innerHTML = TECHS.length? TECHS.map((t,i)=>{
+    const scores=["cost","quality","speed"].map(k=>{const v=t[FIELD[k]];return `<div class="score ${k===state.sort?"on":""}"><span class="lbl">${CRIT[k]}</span><span class="val">${fmt(v)} <span class="hint">/ 5</span></span><div class="meter"><i style="width:${v?v/5*100:0}%"></i></div></div>`;}).join("");
+    return `<article class="card tech">
+      <div class="rank">${i+1}</div>
+      <div class="who"><b>${esc(t.name)}</b><span>${showPhone(t.whatsapp)}</span><div class="hint">${t.ratings? t.ratings+" تقييم":"لا توجد تقييمات بعد"}</div></div>
+      <div class="scores">${scores}</div>
+      <div class="act"><a class="btn wa" href="https://wa.me/974${esc(t.whatsapp)}" target="_blank" rel="noopener" data-contact="${esc(t.id)}">${waIcon} تواصل عبر واتساب</a></div>
+    </article>`;}).join("") : `<div class="card empty">لا يوجد فنيون في هذه الخدمة بعد.</div>`;
+}
+document.querySelectorAll("[data-sort]").forEach(b=>b.onclick=()=>{ if(state.sort===b.dataset.sort) return; state.sort=b.dataset.sort; loadTechs(); });
+
+$("#v-list").addEventListener("click",e=>{
+  const a=e.target.closest("[data-contact]"); if(!a) return;
+  const t=(TECHS||[]).find(x=>x.id===a.dataset.contact); if(!t) return;
+  if(!SESSION){ e.preventDefault(); state.pendingTech=t.id; state.after="list"; go("login"); return; }
+  state.resumeTech=null; $("#resume").innerHTML="";
+  // يُفتح واتساب من الرابط نفسه، ويُنشأ الطلب في الخلفية
+  api("orders",{method:"POST",auth:true,keepalive:true,body:{technicianId:t.id}})
+    .then(()=>{ toast("أُنشئ طلب جديد مع "+t.name+" بحالة «قيد الاتفاق»"); loadOrders(); })
+    .catch(err=>toast(err.message));
+});
+
+function renderReqs(el, list){
+  if(!list.length){ el.innerHTML=`<div class="card empty">لا توجد طلبات هنا. اختر خدمة وتواصل مع فني لإنشاء طلب.</div>`; return; }
+  el.innerHTML=list.map(o=>{
+    const btn = o.status==="pending"
+      ? `<button class="status pending" data-rate="${esc(o.id)}">قيد الاتفاق</button>`
+      : o.status==="completed" ? `<span class="status done">مكتملة · ${esc(o.cost)} ر.ق</span>` : `<span class="status">ملغاة</span>`;
+    return `<div class="card req">${svcIcon(o.service).replace('<svg','<svg width="32" height="32" style="color:var(--accent);flex:none"')}
+      <div class="info"><b>${esc(o.technician.name)}</b><span>${esc(o.serviceName)} · ${fmtDate(o.createdAt)}</span></div>${btn}</div>`;
+  }).join("");
+}
+document.addEventListener("click",e=>{const b=e.target.closest("[data-rate]"); if(b) openRate(b.dataset.rate);});
+
+/* ---------- rating ---------- */
+$("#likerts").innerHTML=["cost","quality","speed"].map(k=>`
+  <fieldset class="likert" style="border:0;padding:0;margin:0 0 12px">
+    <legend class="q">${STATEMENTS[k]} <span class="hint">(تقييم ${CRIT[k]})</span></legend>
+    <div class="opts">${[1,2,3,4,5].map(v=>`<span><input type="radio" name="lk-${k}" id="lk-${k}-${v}" value="${v}"><label for="lk-${k}-${v}">${v}</label></span>`).join("")}</div>
+    <div class="ends"><span>1 لا أوافق بشدة</span><span>5 أوافق بشدة</span></div>
+  </fieldset>`).join("");
+function openRate(id){
+  const o=ORDERS.find(x=>x.id===id); if(!o) return;
+  state.rateId=id; $("#rate-form").reset(); $("#r-err").textContent="";
+  $("#rate-sub").textContent=o.technician.name+" · "+o.serviceName;
+  $("#rate").hidden=false; $("#r-cost").focus();
+}
+const closeRate=()=>{$("#rate").hidden=true;state.rateId=null;};
+$("#r-cancel").onclick=closeRate;
+$("#rate").addEventListener("click",e=>{if(e.target.id==="rate")closeRate();});
+document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("#rate").hidden)closeRate();});
+$("#rate-form").onsubmit=async e=>{
+  e.preventDefault();
+  const cost=parseFloat($("#r-cost").value);
+  const v=k=>{const x=document.querySelector(`input[name="lk-${k}"]:checked`);return x?+x.value:null;};
+  const costScore=v("cost"),qualityScore=v("quality"),speedScore=v("speed");
+  if(!(cost>=0)) return $("#r-err").textContent="اكتب التكلفة بالريال.";
+  if(!costScore||!qualityScore||!speedScore) return $("#r-err").textContent="اختر تقييماً من 1 إلى 5 لكل عنصر.";
+  $("#r-submit").disabled=true;
+  try{
+    await api(`orders/${state.rateId}/complete`,{method:"POST",auth:true,body:{cost,costScore,qualityScore,speedScore}});
+    closeRate(); toast("شكراً، حُفظ تقييمك"); loadOrders();
+  }catch(err){ $("#r-err").textContent=err.message; }
+  finally{ $("#r-submit").disabled=false; }
+};
+
+/* ---------- boot ---------- */
+go("home"); loadServices(); loadOrders();
+</script>
+</body>
+</html>
