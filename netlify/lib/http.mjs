@@ -5,6 +5,14 @@ export class HttpError extends Error {
   constructor(status, message) { super(message); this.status = status; }
 }
 
+/* Read an env var from the Netlify runtime first, then process.env; trims stray spaces/newlines */
+export function env(name) {
+  let v;
+  try { v = globalThis.Netlify?.env?.get?.(name); } catch {}
+  if (v == null || v === "") v = process.env[name];
+  return typeof v === "string" ? v.trim() : v;
+}
+
 export const json = (data, status = 200) =>
   new Response(JSON.stringify(data), {
     status,
@@ -19,7 +27,7 @@ export async function body(req) {
    token = base64url(payload JSON) + "." + HMAC-SHA256(payload, SESSION_SECRET)
    payload = { r: "customer" | "admin", id?: customerId, exp: unix ms } */
 function secret() {
-  const s = process.env.SESSION_SECRET;
+  const s = env("SESSION_SECRET");
   if (!s || s.length < 24) throw new HttpError(500, "متغير SESSION_SECRET غير مضبوط في إعدادات Netlify.");
   return s;
 }
@@ -44,9 +52,9 @@ export function readToken(req, role) {
 }
 
 export function checkAdminPassword(pw) {
-  const real = process.env.ADMIN_PASSWORD;
+  const real = env("ADMIN_PASSWORD");
   if (!real) throw new HttpError(500, "متغير ADMIN_PASSWORD غير مضبوط في إعدادات Netlify.");
-  const a = createHmac("sha256", "cmp").update(String(pw || "")).digest();
+  const a = createHmac("sha256", "cmp").update(String(pw || "").trim()).digest();
   const b = createHmac("sha256", "cmp").update(real).digest();
   return timingSafeEqual(a, b);
 }

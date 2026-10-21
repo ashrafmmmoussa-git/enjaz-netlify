@@ -2,7 +2,7 @@
 import { getDatabase } from "@netlify/database";
 import {
   HttpError, json, body, issueToken, readToken, checkAdminPassword,
-  isQatarMobile, score, pgError, pgCode,
+  isQatarMobile, score, pgError, pgCode, env,
 } from "../lib/http.mjs";
 
 export const config = { path: "/api/*" };
@@ -207,6 +207,20 @@ async function deleteTechnician(id) {
   return { ok: true };
 }
 
+/* ================= health check ================= */
+// يعرض فقط هل المتغيرات موجودة (نعم/لا) دون كشف قيمها، وهل قاعدة البيانات متصلة
+async function health() {
+  const out = {
+    ADMIN_PASSWORD: !!env("ADMIN_PASSWORD"),
+    SESSION_SECRET: !!env("SESSION_SECRET") && env("SESSION_SECRET").length >= 24,
+    database: false,
+    deployContext: process.env.CONTEXT || null,
+  };
+  try { const [r] = await db().sql`SELECT count(*)::int AS n FROM services`; out.database = true; out.services = r.n; }
+  catch (e) { out.databaseError = String(e?.cause?.message || e?.message || e).slice(0, 160); }
+  return out;
+}
+
 /* ================= router ================= */
 
 export default async (req) => {
@@ -219,6 +233,7 @@ export default async (req) => {
     const [a, b, c] = parts;
 
     // public
+    if (m === "GET"  && a === "health")            return json(await health());
     if (m === "GET"  && a === "services" && !b)    return json(await listServices());
     if (m === "GET"  && a === "technicians" && !b) return json(await listTechnicians(url));
     if (m === "POST" && a === "login")             return json(await login(req));
