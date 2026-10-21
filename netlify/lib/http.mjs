@@ -5,12 +5,19 @@ export class HttpError extends Error {
   constructor(status, message) { super(message); this.status = status; }
 }
 
-/* Read an env var from the Netlify runtime first, then process.env; trims stray spaces/newlines */
+/* Normalize text: Unicode NFC, trim spaces/newlines, drop one pair of wrapping quotes */
+export const clean = (v) => {
+  let s = String(v ?? "").normalize("NFC").trim();
+  if (s.length >= 2 && /^(["'])[\s\S]*\1$/.test(s)) s = s.slice(1, -1).trim();
+  return s;
+};
+
+/* Read an env var from the Netlify runtime first, then process.env */
 export function env(name) {
   let v;
   try { v = globalThis.Netlify?.env?.get?.(name); } catch {}
   if (v == null || v === "") v = process.env[name];
-  return typeof v === "string" ? v.trim() : v;
+  return typeof v === "string" ? clean(v) : v;
 }
 
 export const json = (data, status = 200) =>
@@ -28,7 +35,7 @@ export async function body(req) {
    payload = { r: "customer" | "admin", id?: customerId, exp: unix ms } */
 function secret() {
   const s = env("SESSION_SECRET");
-  if (!s || s.length < 24) throw new HttpError(500, "متغير SESSION_SECRET غير مضبوط في إعدادات Netlify.");
+  if (!s || s.length < 24) throw new HttpError(500, "متغير SESSION_SECRET غير مضبوط في إعدادات Netlify أو أقصر من 24 حرفاً.");
   return s;
 }
 const b64 = (buf) => Buffer.from(buf).toString("base64url");
@@ -54,7 +61,7 @@ export function readToken(req, role) {
 export function checkAdminPassword(pw) {
   const real = env("ADMIN_PASSWORD");
   if (!real) throw new HttpError(500, "متغير ADMIN_PASSWORD غير مضبوط في إعدادات Netlify.");
-  const a = createHmac("sha256", "cmp").update(String(pw || "").trim()).digest();
+  const a = createHmac("sha256", "cmp").update(clean(pw)).digest();
   const b = createHmac("sha256", "cmp").update(real).digest();
   return timingSafeEqual(a, b);
 }

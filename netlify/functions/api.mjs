@@ -210,9 +210,13 @@ async function deleteTechnician(id) {
 /* ================= health check ================= */
 // يعرض فقط هل المتغيرات موجودة (نعم/لا) دون كشف قيمها، وهل قاعدة البيانات متصلة
 async function health() {
+  const pw = env("ADMIN_PASSWORD") || "", ss = env("SESSION_SECRET") || "";
   const out = {
-    ADMIN_PASSWORD: !!env("ADMIN_PASSWORD"),
-    SESSION_SECRET: !!env("SESSION_SECRET") && env("SESSION_SECRET").length >= 24,
+    ADMIN_PASSWORD: !!pw,
+    ADMIN_PASSWORD_length: pw.length,                       // الطول فقط، للتأكد من عدم وجود حروف زائدة
+    ADMIN_PASSWORD_nonLatin: /[^\x20-\x7E]/.test(pw),        // هل فيها حروف عربية أو رموز غير لاتينية
+    SESSION_SECRET: ss.length >= 24,
+    SESSION_SECRET_length: ss.length,                       // يجب أن يكون 24 أو أكثر
     database: false,
     deployContext: process.env.CONTEXT || null,
   };
