@@ -224,6 +224,50 @@ async function updateRating(id, req) {
   return { ok: true };
 }
 
+const isCode = (c) => /^[a-z][a-z0-9_-]{1,19}$/.test(String(c || ""));
+function serviceInput(b) {
+  const code = String(b.code || "").trim().toLowerCase();
+  const name = String(b.name || "").trim();
+  const description = String(b.description || "").trim().slice(0, 200) || null;
+  // الترتيب اختياري: بدون قيمة تُضاف الخدمة في آخر القائمة
+  const raw = b.sortOrder === "" || b.sortOrder == null ? null : Number(b.sortOrder);
+  if (raw != null && (!Number.isInteger(raw) || raw < 0 || raw > 999)) throw new HttpError(400, "الترتيب رقم صحيح من 0 إلى 999.");
+  const sortOrder = raw;
+  if (!name) throw new HttpError(400, "اكتب اسم الخدمة.");
+  if (!isCode(code)) throw new HttpError(400, "رمز الخدمة يُكتب بحروف إنجليزية صغيرة وأرقام فقط، ويبدأ بحرف (مثال: paint).");
+  return { code, name: name.slice(0, 60), description, sortOrder };
+}
+
+async function addService(req) {
+  const v = serviceInput(await body(req));
+  try {
+    const [r] = await db().sql`
+      INSERT INTO services (code, name_ar, description, sort_order)
+      VALUES (${v.code}, ${v.name}, ${v.description},
+              COALESCE(${v.sortOrder}::smallint, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM services)))
+      RETURNING id`;
+    return { id: r.id };
+  } catch (e) {
+    if (pgCode(e) === "23505") throw new HttpError(409, "رمز الخدمة مستخدم لخدمة أخرى.");
+    throw e;
+  }
+}
+
+async function updateService(id, req) {
+  const v = serviceInput(await body(req));
+  try {
+    const rows = await db().sql`
+      UPDATE services SET code = ${v.code}, name_ar = ${v.name}, description = ${v.description},
+             sort_order = COALESCE(${v.sortOrder}::smallint, sort_order)
+       WHERE id = ${id} RETURNING id`;
+    if (!rows.length) throw new HttpError(404, "الخدمة غير موجودة.");
+    return { ok: true };
+  } catch (e) {
+    if (pgCode(e) === "23505") throw new HttpError(409, "رمز الخدمة مستخدم لخدمة أخرى.");
+    throw e;
+  }
+}
+
 async function setActive(table, id, req) {
   const { isActive } = await body(req);
   const rows = table === "services"
@@ -288,6 +332,8 @@ export default async (req) => {
       if (adminLists[b] && !c && m === "GET") return json(await adminLists[b]());
       if (b === "technicians" && !c && m === "POST") return json(await addTechnician(req), 201);
       if ((b === "technicians" || b === "services") && c && m === "PATCH") return json(await setActive(b, id(2), req));
+      if (b === "services" && !c && m === "POST") return json(await addService(req), 201);
+      if (b === "services" && c && m === "PUT") return json(await updateService(id(2), req));
       if (b === "technicians" && c && m === "PUT") return json(await updateTechnician(id(2), req));
       if (b === "ratings" && c && m === "PATCH") return json(await updateRating(id(2), req));
       if (b === "technicians" && c && m === "DELETE") return json(await deleteTechnician(id(2)));

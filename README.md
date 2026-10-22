@@ -64,6 +64,8 @@ netlify dev             # يشغّل الموقع والدوال وقاعدة Po
 | `GET /api/admin/summary` · `services` · `technicians` · `customers` · `orders` · `ratings` | جداول الإدارة | إدارة |
 | `POST /api/admin/technicians` | `{name, serviceId, whatsapp}` إضافة فني | إدارة |
 | `PATCH /api/admin/technicians/:id` · `services/:id` | `{isActive}` إيقاف أو تفعيل | إدارة |
+| `POST /api/admin/services` | `{name, code, description?, sortOrder?}` إضافة خدمة | إدارة |
+| `PUT /api/admin/services/:id` | `{name, code, description?, sortOrder?}` تعديل خدمة | إدارة |
 | `PUT /api/admin/technicians/:id` | `{name, serviceId, whatsapp}` تعديل بيانات الفني | إدارة |
 | `PATCH /api/admin/ratings/:id` | `{costScore, qualityScore, speedScore}` تعديل التقييم | إدارة |
 | `DELETE /api/admin/technicians/:id` | حذف فني ليس له طلبات | إدارة |

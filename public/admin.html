@@ -24,6 +24,7 @@
   .filter button{background:none;border:0;color:var(--accent);font-weight:600;padding:0}
   td .edit{background:none;border:0;font-weight:600;padding:0;color:var(--accent)}
   .stars-cell{display:flex;align-items:center;gap:6px;white-space:nowrap}
+  td.wrap-cell{white-space:normal;min-width:9em}
 </style>
 </head>
 <body class="is-admin">
@@ -66,6 +67,17 @@
           <div class="phone"><span>+974</span><input id="a-phone" inputmode="numeric" maxlength="8" placeholder="3312 4567"></div></div>
         <div class="err" id="a-err"></div>
         <button class="btn" type="submit" id="a-submit">إضافة الفني</button>
+      </form>
+      <form class="card panel" id="s-form" novalidate hidden>
+        <h2 style="font-size:18px">إضافة خدمة</h2>
+        <div class="field"><label for="s-name">اسم الخدمة</label><input id="s-name" placeholder="مثال: الدهانات"></div>
+        <div class="field"><label for="s-desc">وصف قصير <span class="hint">(اختياري)</span></label><input id="s-desc" maxlength="200" placeholder="مثال: دهان داخلي وخارجي، ورق جدران"></div>
+        <div class="field"><label for="s-code">رمز الخدمة بالإنجليزية</label><input id="s-code" dir="ltr" maxlength="20" placeholder="paint" autocapitalize="off" spellcheck="false">
+          <span class="hint">حروف إنجليزية صغيرة وأرقام. لهذه الرموز أيقونات جاهزة: <span dir="ltr">paint · clean · appliance · pest</span>، وغيرها تأخذ أيقونة عامة.</span></div>
+        <div class="field"><label for="s-sort">الترتيب في الشاشة الرئيسية <span class="hint">(اختياري)</span></label><input id="s-sort" type="number" min="0" max="999" inputmode="numeric" placeholder="يُضاف في الآخر"></div>
+        <p class="hint" style="margin:0">تُضاف الخدمة مفعّلة وتظهر للعملاء فوراً. أضف لها فنيين من تبويب الفنيين.</p>
+        <div class="err" id="s-err"></div>
+        <button class="btn" type="submit" id="s-submit">إضافة الخدمة</button>
       </form>
       <div class="card panel" style="min-width:0">
         <p class="hint" style="margin:0" id="caption"></p>
@@ -150,11 +162,12 @@ function table(head,rows,empty){
 function renderTable(loading){
   document.querySelectorAll("[data-tab]").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.tab===tab)));
   $("#a-form").hidden = tab!=="technicians";
-  $("#cols").classList.toggle("with-form", tab==="technicians");
+  $("#s-form").hidden = tab!=="services";
+  $("#cols").classList.toggle("with-form", tab==="technicians"||tab==="services");
   const d=DATA[tab];
   if(loading||!d){ $("#table").innerHTML=`<div class="loading">جارٍ التحميل…</div>`; return; }
   const caps={
-    services:"الخدمات الظاهرة في الشاشة الرئيسية. إيقاف خدمة يخفيها عن العملاء.",
+    services:"الخدمات الظاهرة في الشاشة الرئيسية حسب الترتيب. إيقاف خدمة يخفيها عن العملاء. لا تُحذف الخدمة حفاظاً على سجل طلباتها.",
     technicians:"المتوسطات تُحسب من جدول التقييمات. الفني الذي له طلبات يُوقف ولا يُحذف.",
     customers:"يُسجَّل العميل عند دخوله برقم واتساب.",
     orders:"يُنشأ الطلب تلقائياً عند ضغط العميل على «تواصل عبر واتساب». آخر 500 طلب.",
@@ -164,7 +177,7 @@ function renderTable(loading){
   $("#filter").hidden = !(tab==="orders"&&filter==="pending");
   $("#filter").innerHTML = `<span class="status pending">قيد الاتفاق فقط · ${rowsOf.length}</span><button type="button" id="clear-filter">عرض كل الطلبات</button>`;
   const H={
-    services:()=>table(["الرمز","الخدمة","الوصف","الفنيون","الحالة",""],d.map(s=>`<tr><td dir="ltr">${esc(s.code)}</td><td>${esc(s.name_ar)}</td><td>${esc(s.description)}</td><td class="num">${s.technicians}</td><td>${pill(s.is_active,"مفعّلة","موقوفة")}</td><td><button class="toggle" data-toggle="services/${s.id}" data-on="${!s.is_active}">${s.is_active?"إيقاف":"تفعيل"}</button></td></tr>`),"لا توجد خدمات."),
+    services:()=>table(["الترتيب","الرمز","الخدمة","الوصف","الفنيون","الحالة",""],d.map(s=>`<tr><td class="num">${s.sort_order}</td><td dir="ltr">${esc(s.code)}</td><td>${esc(s.name_ar)}</td><td class="wrap-cell">${esc(s.description)}</td><td class="num">${s.technicians}</td><td>${pill(s.is_active,"مفعّلة","موقوفة")}</td><td style="white-space:nowrap"><button class="edit" data-edit-svc="${s.id}">تعديل</button> · <button class="toggle" data-toggle="services/${s.id}" data-on="${!s.is_active}">${s.is_active?"إيقاف":"تفعيل"}</button></td></tr>`),"لا توجد خدمات. أضف أول خدمة من النموذج."),
     technicians:()=>table(["الفني","الخدمة","واتساب","التكلفة","الجودة","الاستجابة","التقييمات","الطلبات","الحالة",""],d.map(t=>`<tr><td>${esc(t.name)}</td><td>${esc(t.service_name)}</td><td class="num" dir="ltr">${showPhone(t.whatsapp)}</td><td class="num">${fmt(t.avg_cost)}</td><td class="num">${fmt(t.avg_quality)}</td><td class="num">${fmt(t.avg_speed)}</td><td class="num">${t.ratings}</td><td class="num">${t.orders}</td><td>${pill(t.is_active,"نشط","موقوف")}</td>
       <td style="white-space:nowrap"><button class="edit" data-edit-tech="${t.id}">تعديل</button> · <button class="toggle" data-toggle="technicians/${t.id}" data-on="${!t.is_active}">${t.is_active?"إيقاف":"تفعيل"}</button>${t.orders?"":` · <button class="del" data-del="${t.id}">حذف</button>`}</td></tr>`),"لم يُضف أي فني بعد. أضف أول فني من النموذج."),
     customers:()=>table(["واتساب","الاسم","أول تسجيل","آخر دخول","الطلبات"],d.map(c=>`<tr><td class="num" dir="ltr">${showPhone(c.whatsapp)}</td><td>${esc(c.name)||"—"}</td><td>${fmtDate(c.created_at)}</td><td>${fmtDate(c.last_login_at)}</td><td class="num">${c.orders}</td></tr>`),"لم يسجّل أي عميل بعد."),
@@ -180,7 +193,15 @@ $("#filter").addEventListener("click",e=>{ if(e.target.id==="clear-filter") open
 let EDIT=null; // {kind, id}
 function openEdit(kind,id){
   EDIT={kind,id}; $("#edit-err").textContent="";
-  if(kind==="tech"){
+  if(kind==="svc"){
+    const sv=SERVICES.find(x=>String(x.id)===String(id));
+    $("#edit-h").textContent="تعديل الخدمة"; $("#edit-sub").textContent=sv.name_ar;
+    $("#edit-body").innerHTML=`
+      <div class="field"><label for="e-sname">اسم الخدمة</label><input id="e-sname" value="${esc(sv.name_ar)}"></div>
+      <div class="field"><label for="e-sdesc">وصف قصير</label><input id="e-sdesc" maxlength="200" value="${esc(sv.description||"")}"></div>
+      <div class="field"><label for="e-scode">رمز الخدمة بالإنجليزية</label><input id="e-scode" dir="ltr" maxlength="20" value="${esc(sv.code)}" autocapitalize="off" spellcheck="false"></div>
+      <div class="field"><label for="e-ssort">الترتيب</label><input id="e-ssort" type="number" min="0" max="999" value="${sv.sort_order}"></div>`;
+  } else if(kind==="tech"){
     const t=DATA.technicians.find(x=>String(x.id)===String(id));
     $("#edit-h").textContent="تعديل بيانات الفني"; $("#edit-sub").textContent=t.name;
     $("#edit-body").innerHTML=`
@@ -207,7 +228,12 @@ $("#edit-form").onsubmit=async e=>{
   e.preventDefault(); if(!EDIT) return;
   const err=m=>$("#edit-err").textContent=m;
   let path,method,body;
-  if(EDIT.kind==="tech"){
+  if(EDIT.kind==="svc"){
+    const name=$("#e-sname").value.trim(), code=$("#e-scode").value.trim().toLowerCase();
+    if(!name) return err("اكتب اسم الخدمة.");
+    if(!/^[a-z][a-z0-9_-]{1,19}$/.test(code)) return err("رمز الخدمة حروف إنجليزية صغيرة وأرقام، ويبدأ بحرف.");
+    path="services/"+EDIT.id; method="PUT"; body={name,code,description:$("#e-sdesc").value.trim(),sortOrder:$("#e-ssort").value};
+  } else if(EDIT.kind==="tech"){
     const name=$("#e-name").value.trim(), serviceId=$("#e-svc").value, whatsapp=$("#e-phone").value.trim();
     if(!name) return err("اكتب اسم الفني.");
     if(!/^[3567]\d{7}$/.test(whatsapp)) return err("رقم واتساب غير صحيح. 8 أرقام تبدأ بـ 3 أو 5 أو 6 أو 7.");
@@ -224,7 +250,8 @@ $("#edit-form").onsubmit=async e=>{
 };
 
 $("#table").addEventListener("click",async e=>{
-  const et=e.target.closest("[data-edit-tech]"), er=e.target.closest("[data-edit-rating]");
+  const et=e.target.closest("[data-edit-tech]"), er=e.target.closest("[data-edit-rating]"), es=e.target.closest("[data-edit-svc]");
+  if(es) return openEdit("svc",es.dataset.editSvc);
   if(et) return openEdit("tech",et.dataset.editTech);
   if(er) return openEdit("rating",er.dataset.editRating);
   const tg=e.target.closest("[data-toggle]"), del=e.target.closest("[data-del]");
@@ -247,6 +274,19 @@ $("#a-form").onsubmit=async e=>{
   try{ await api("technicians",{method:"POST",body:{name,serviceId,whatsapp}}); $("#a-form").reset(); toast("أُضيف "+name); refresh(); }
   catch(err){ $("#a-err").textContent=err.message; }
   finally{ $("#a-submit").disabled=false; }
+};
+
+$("#s-code").addEventListener("input",e=>e.target.value=e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g,""));
+$("#s-form").onsubmit=async e=>{
+  e.preventDefault();
+  const name=$("#s-name").value.trim(), code=$("#s-code").value.trim(), description=$("#s-desc").value.trim(), sortOrder=$("#s-sort").value;
+  const err=m=>$("#s-err").textContent=m;
+  if(!name) return err("اكتب اسم الخدمة.");
+  if(!/^[a-z][a-z0-9_-]{1,19}$/.test(code)) return err("رمز الخدمة حروف إنجليزية صغيرة وأرقام، ويبدأ بحرف (مثال: paint).");
+  err(""); $("#s-submit").disabled=true;
+  try{ await api("services",{method:"POST",body:{name,code,description,sortOrder}}); $("#s-form").reset(); toast("أُضيفت خدمة "+name); refresh(); }
+  catch(x){ err(x.message); }
+  finally{ $("#s-submit").disabled=false; }
 };
 
 show();
