@@ -9,12 +9,21 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Readex+Pro:wght@500;600;700&family=IBM+Plex+Sans+Arabic:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="/styles.css">
+<script src="/stars.js"></script>
 <style>
   .admin-cols{display:grid;gap:16px}
   @media(min-width:820px){.admin-cols.with-form{grid-template-columns:320px minmax(0,1fr)}}
   .toggle,.del{background:none;border:0;font-weight:600;padding:0;color:var(--accent)}
   .toggle{color:var(--ink)}
   .status.off{background:var(--line);color:var(--muted)}
+  button.kpi{font:inherit;color:inherit;text-align:start;cursor:pointer;transition:border-color .15s,transform .15s}
+  button.kpi:hover{border-color:var(--accent);transform:translateY(-1px)}
+  button.kpi[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft)}
+  button.kpi small{font-size:12px;color:var(--accent);font-weight:600}
+  .filter{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px}
+  .filter button{background:none;border:0;color:var(--accent);font-weight:600;padding:0}
+  td .edit{background:none;border:0;font-weight:600;padding:0;color:var(--accent)}
+  .stars-cell{display:flex;align-items:center;gap:6px;white-space:nowrap}
 </style>
 </head>
 <body class="is-admin">
@@ -60,11 +69,20 @@
       </form>
       <div class="card panel" style="min-width:0">
         <p class="hint" style="margin:0" id="caption"></p>
+        <div class="filter" id="filter" hidden></div>
         <div class="tbl-wrap" id="table"></div>
       </div>
     </div>
   </section>
 </main>
+<div class="overlay" id="edit" hidden>
+  <form class="card modal" id="edit-form" novalidate role="dialog" aria-modal="true" aria-labelledby="edit-h">
+    <div><h2 id="edit-h" style="font-size:20px"></h2><p class="hint" style="margin:4px 0 0" id="edit-sub"></p></div>
+    <div id="edit-body"></div>
+    <div class="err" id="edit-err"></div>
+    <div class="row"><button class="btn" type="submit" id="edit-submit">حفظ التعديل</button><button class="btn ghost" type="button" id="edit-cancel">إلغاء</button></div>
+  </form>
+</div>
 <div class="toast" id="toast" hidden></div>
 
 <script>
@@ -91,7 +109,7 @@ async function api(path,{method="GET",body}={}){
   return data;
 }
 
-let tab="technicians", DATA={}, SERVICES=[];
+let tab="technicians", DATA={}, SERVICES=[], filter=null; // filter: "pending" لطلبات قيد الاتفاق
 function show(){
   $("#v-login").hidden=!!TOKEN; $("#v-admin").hidden=!TOKEN; $("#logout").hidden=!TOKEN;
   if(TOKEN) refresh();
@@ -108,13 +126,22 @@ async function refresh(){
   try{
     const [sum, services, rows] = await Promise.all([api("summary"), api("services"), tab==="services"?null:api(tab)]);
     SERVICES=services; DATA[tab]= tab==="services"? services : rows;
-    $("#kpis").innerHTML=[["الخدمات المفعّلة",sum.services],["الفنيون النشطون",sum.technicians],["العملاء",sum.customers],["طلبات قيد الاتفاق",sum.pending],["التقييمات",sum.ratings]]
-      .map(([l,v])=>`<div class="kpi"><span>${l}</span><b>${v}</b></div>`).join("");
+    KPIS=[["services","الخدمات المفعّلة",sum.services],["technicians","الفنيون النشطون",sum.technicians],["customers","العملاء",sum.customers],["pending","طلبات قيد الاتفاق",sum.pending],["ratings","التقييمات",sum.ratings]];
+    renderKpis();
     $("#a-svc").innerHTML=SERVICES.map(s=>`<option value="${s.id}">${esc(s.name_ar)}</option>`).join("");
     renderTable();
   }catch(err){ if(TOKEN) toast(err.message); }
 }
-document.querySelectorAll("[data-tab]").forEach(b=>b.onclick=()=>{tab=b.dataset.tab;renderTable(true);refresh();});
+let KPIS=[];
+const kpiKey=()=> tab==="orders"&&filter==="pending" ? "pending" : tab;
+function renderKpis(){
+  $("#kpis").innerHTML=KPIS.map(([k,l,v])=>`<button type="button" class="kpi" data-kpi="${k}" aria-pressed="${k===kpiKey()}"><span>${l}</span><b>${v}</b><small>عرض القائمة ←</small></button>`).join("");
+}
+function openTab(t,f=null){ tab=t; filter=f; renderKpis(); renderTable(true); refresh(); }
+$("#kpis").addEventListener("click",e=>{const b=e.target.closest("[data-kpi]"); if(!b) return;
+  const k=b.dataset.kpi; if(k==="pending") openTab("orders","pending"); else openTab(k);
+  $("#caption").scrollIntoView({behavior:"smooth",block:"center"});});
+document.querySelectorAll("[data-tab]").forEach(b=>b.onclick=()=>openTab(b.dataset.tab));
 
 const pill=(on,a,b)=>`<span class="status ${on?"done":"off"}">${on?a:b}</span>`;
 function table(head,rows,empty){
@@ -133,18 +160,73 @@ function renderTable(loading){
     orders:"يُنشأ الطلب تلقائياً عند ضغط العميل على «تواصل عبر واتساب». آخر 500 طلب.",
     ratings:"تقييم واحد لكل طلب مكتمل، من 1 (لا أوافق بشدة) إلى 5 (أوافق بشدة)."};
   $("#caption").textContent=caps[tab];
+  const rowsOf = tab==="orders"&&filter==="pending" ? d.filter(o=>o.status==="pending") : d;
+  $("#filter").hidden = !(tab==="orders"&&filter==="pending");
+  $("#filter").innerHTML = `<span class="status pending">قيد الاتفاق فقط · ${rowsOf.length}</span><button type="button" id="clear-filter">عرض كل الطلبات</button>`;
   const H={
     services:()=>table(["الرمز","الخدمة","الوصف","الفنيون","الحالة",""],d.map(s=>`<tr><td dir="ltr">${esc(s.code)}</td><td>${esc(s.name_ar)}</td><td>${esc(s.description)}</td><td class="num">${s.technicians}</td><td>${pill(s.is_active,"مفعّلة","موقوفة")}</td><td><button class="toggle" data-toggle="services/${s.id}" data-on="${!s.is_active}">${s.is_active?"إيقاف":"تفعيل"}</button></td></tr>`),"لا توجد خدمات."),
     technicians:()=>table(["الفني","الخدمة","واتساب","التكلفة","الجودة","الاستجابة","التقييمات","الطلبات","الحالة",""],d.map(t=>`<tr><td>${esc(t.name)}</td><td>${esc(t.service_name)}</td><td class="num" dir="ltr">${showPhone(t.whatsapp)}</td><td class="num">${fmt(t.avg_cost)}</td><td class="num">${fmt(t.avg_quality)}</td><td class="num">${fmt(t.avg_speed)}</td><td class="num">${t.ratings}</td><td class="num">${t.orders}</td><td>${pill(t.is_active,"نشط","موقوف")}</td>
-      <td><button class="toggle" data-toggle="technicians/${t.id}" data-on="${!t.is_active}">${t.is_active?"إيقاف":"تفعيل"}</button>${t.orders?"":` · <button class="del" data-del="${t.id}">حذف</button>`}</td></tr>`),"لم يُضف أي فني بعد. أضف أول فني من النموذج."),
+      <td style="white-space:nowrap"><button class="edit" data-edit-tech="${t.id}">تعديل</button> · <button class="toggle" data-toggle="technicians/${t.id}" data-on="${!t.is_active}">${t.is_active?"إيقاف":"تفعيل"}</button>${t.orders?"":` · <button class="del" data-del="${t.id}">حذف</button>`}</td></tr>`),"لم يُضف أي فني بعد. أضف أول فني من النموذج."),
     customers:()=>table(["واتساب","الاسم","أول تسجيل","آخر دخول","الطلبات"],d.map(c=>`<tr><td class="num" dir="ltr">${showPhone(c.whatsapp)}</td><td>${esc(c.name)||"—"}</td><td>${fmtDate(c.created_at)}</td><td>${fmtDate(c.last_login_at)}</td><td class="num">${c.orders}</td></tr>`),"لم يسجّل أي عميل بعد."),
-    orders:()=>table(["التاريخ","العميل","الفني","الخدمة","الحالة","التكلفة","الإغلاق"],d.map(o=>`<tr><td>${fmtDate(o.created_at)}</td><td><span dir="ltr">${showPhone(o.customer_whatsapp)}</span>${o.customer_name?" · "+esc(o.customer_name):""}</td><td>${esc(o.technician_name)}</td><td>${esc(o.service_name)}</td><td>${o.status==="pending"?'<span class="status pending">قيد الاتفاق</span>':o.status==="completed"?'<span class="status done">مكتملة</span>':'<span class="status off">ملغاة</span>'}</td><td class="num">${o.cost!=null?o.cost+" ر.ق":"—"}</td><td>${fmtDate(o.completed_at)}</td></tr>`),"لم يُنشأ أي طلب بعد."),
-    ratings:()=>table(["التاريخ","الفني","الخدمة","العميل","التكلفة","الجودة","الاستجابة"],d.map(r=>`<tr><td>${fmtDate(r.created_at)}</td><td>${esc(r.technician_name)}</td><td>${esc(r.service_name)}</td><td class="num" dir="ltr">${showPhone(r.customer_whatsapp)}</td><td class="num">${r.cost_score}</td><td class="num">${r.quality_score}</td><td class="num">${r.speed_score}</td></tr>`),"لا توجد تقييمات بعد.")
+    orders:()=>table(["التاريخ","العميل","الفني","الخدمة","الحالة","التكلفة","الإغلاق"],rowsOf.map(o=>`<tr><td>${fmtDate(o.created_at)}</td><td><span dir="ltr">${showPhone(o.customer_whatsapp)}</span>${o.customer_name?" · "+esc(o.customer_name):""}</td><td>${esc(o.technician_name)}</td><td>${esc(o.service_name)}</td><td>${o.status==="pending"?'<span class="status pending">قيد الاتفاق</span>':o.status==="completed"?'<span class="status done">مكتملة</span>':'<span class="status off">ملغاة</span>'}</td><td class="num">${o.cost!=null?o.cost+" ر.ق":"—"}</td><td>${fmtDate(o.completed_at)}</td></tr>`),filter==="pending"?"لا توجد طلبات قيد الاتفاق.":"لم يُنشأ أي طلب بعد."),
+    ratings:()=>table(["التاريخ","الفني","الخدمة","العميل","التكلفة","الجودة","الاستجابة",""],d.map(r=>`<tr><td>${fmtDate(r.created_at)}</td><td>${esc(r.technician_name)}</td><td>${esc(r.service_name)}</td><td class="num" dir="ltr">${showPhone(r.customer_whatsapp)}</td>${[r.cost_score,r.quality_score,r.speed_score].map(v=>`<td><span class="stars-cell">${starsInline(v)}<span class="num">${v}</span></span></td>`).join("")}<td><button class="edit" data-edit-rating="${r.id}">تعديل</button></td></tr>`),"لا توجد تقييمات بعد.")
   };
   $("#table").innerHTML=H[tab]();
 }
 
+$("#filter").addEventListener("click",e=>{ if(e.target.id==="clear-filter") openTab("orders"); });
+
+/* ---------- edit dialog (technician / rating) ---------- */
+let EDIT=null; // {kind, id}
+function openEdit(kind,id){
+  EDIT={kind,id}; $("#edit-err").textContent="";
+  if(kind==="tech"){
+    const t=DATA.technicians.find(x=>String(x.id)===String(id));
+    $("#edit-h").textContent="تعديل بيانات الفني"; $("#edit-sub").textContent=t.name;
+    $("#edit-body").innerHTML=`
+      <div class="field"><label for="e-name">اسم الفني</label><input id="e-name" value="${esc(t.name)}"></div>
+      <div class="field"><label for="e-svc">الخدمة</label><select id="e-svc">${SERVICES.map(s=>`<option value="${s.id}" ${s.id===t.service_id?"selected":""}>${esc(s.name_ar)}</option>`).join("")}</select>
+        ${t.orders?`<span class="hint">طلبات هذا الفني السابقة تبقى مسجّلة على خدمتها الأصلية.</span>`:""}</div>
+      <div class="field"><label for="e-phone">رقم واتساب الفني</label>
+        <div class="phone"><span>+974</span><input id="e-phone" inputmode="numeric" maxlength="8" value="${esc(t.whatsapp)}"></div></div>`;
+    $("#e-phone").addEventListener("input",e=>e.target.value=e.target.value.replace(/\D/g,""));
+  } else {
+    const r=DATA.ratings.find(x=>String(x.id)===String(id));
+    $("#edit-h").textContent="تعديل التقييم"; $("#edit-sub").textContent=`${r.technician_name} · ${r.service_name} · ${fmtDate(r.created_at)}`;
+    $("#edit-body").innerHTML=starPicker("ed-cost","تقييم التكلفة")+starPicker("ed-quality","تقييم الجودة")+starPicker("ed-speed","تقييم سرعة الاستجابة");
+    bindStars($("#edit-body"));
+    setStars("ed-cost",r.cost_score); setStars("ed-quality",r.quality_score); setStars("ed-speed",r.speed_score);
+  }
+  $("#edit").hidden=false; $("#edit-body").querySelector("input")?.focus();
+}
+const closeEdit=()=>{$("#edit").hidden=true;EDIT=null;};
+$("#edit-cancel").onclick=closeEdit;
+$("#edit").addEventListener("click",e=>{if(e.target.id==="edit")closeEdit();});
+document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("#edit").hidden)closeEdit();});
+$("#edit-form").onsubmit=async e=>{
+  e.preventDefault(); if(!EDIT) return;
+  const err=m=>$("#edit-err").textContent=m;
+  let path,method,body;
+  if(EDIT.kind==="tech"){
+    const name=$("#e-name").value.trim(), serviceId=$("#e-svc").value, whatsapp=$("#e-phone").value.trim();
+    if(!name) return err("اكتب اسم الفني.");
+    if(!/^[3567]\d{7}$/.test(whatsapp)) return err("رقم واتساب غير صحيح. 8 أرقام تبدأ بـ 3 أو 5 أو 6 أو 7.");
+    path="technicians/"+EDIT.id; method="PUT"; body={name,serviceId,whatsapp};
+  } else {
+    const costScore=checkedStars("ed-cost"), qualityScore=checkedStars("ed-quality"), speedScore=checkedStars("ed-speed");
+    if(!costScore||!qualityScore||!speedScore) return err("اختر عدد النجوم لكل عنصر.");
+    path="ratings/"+EDIT.id; method="PATCH"; body={costScore,qualityScore,speedScore};
+  }
+  $("#edit-submit").disabled=true;
+  try{ await api(path,{method,body}); closeEdit(); toast("حُفظ التعديل"); refresh(); }
+  catch(x){ err(x.message); }
+  finally{ $("#edit-submit").disabled=false; }
+};
+
 $("#table").addEventListener("click",async e=>{
+  const et=e.target.closest("[data-edit-tech]"), er=e.target.closest("[data-edit-rating]");
+  if(et) return openEdit("tech",et.dataset.editTech);
+  if(er) return openEdit("rating",er.dataset.editRating);
   const tg=e.target.closest("[data-toggle]"), del=e.target.closest("[data-del]");
   try{
     if(tg){ tg.disabled=true; await api(tg.dataset.toggle,{method:"PATCH",body:{isActive:tg.dataset.on==="true"}}); toast("تم التحديث"); refresh(); }

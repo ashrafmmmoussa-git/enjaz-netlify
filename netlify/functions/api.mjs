@@ -23,14 +23,18 @@ async function listServices() {
 
 async function listTechnicians(url) {
   const code = url.searchParams.get("service") || "";
-  const sort = SORTS[url.searchParams.get("sort")] || SORTS.cost; // الافتراضي: التكلفة تنازلياً
-  // عمود الترتيب من قائمة ثابتة؛ القيمة المدخلة تمر كمعامل
+  const key = SORTS[url.searchParams.get("sort")] ? url.searchParams.get("sort") : "cost";
+  // الترتيب: المعيار المختار أولاً، وعند التساوي: التكلفة ثم الجودة ثم سرعة الاستجابة (كلها تنازلياً)
+  // مثال الافتراضي: avg_cost DESC, avg_quality DESC, avg_speed DESC
+  const order = [key, ...["cost", "quality", "speed"].filter((k) => k !== key)]
+    .map((k) => `${SORTS[k]} DESC NULLS LAST`).join(", ");
+  // أسماء الأعمدة من قائمة ثابتة؛ القيمة المدخلة تمر كمعامل
   const rows = await db().sql.unsafe(
     `SELECT technician_id, name, whatsapp, service_code, service_name,
             avg_cost, avg_quality, avg_speed, ratings_count
        FROM technician_scores
       WHERE service_code = $1
-      ORDER BY ${sort} DESC NULLS LAST, ratings_count DESC, technician_id`,
+      ORDER BY ${order}, ratings_count DESC, technician_id`,
     [code]
   );
   return rows.map((r) => ({
@@ -167,7 +171,7 @@ const adminLists = {
       JOIN technicians t ON t.id = o.technician_id JOIN services s ON s.id = o.service_id
   ORDER BY o.created_at DESC LIMIT 500`,
   ratings: () => db().sql`
-    SELECT r.id, r.cost_score, r.quality_score, r.speed_score, r.created_at,
+    SELECT r.id, r.order_id, r.cost_score, r.quality_score, r.speed_score, r.created_at,
            t.name AS technician_name, s.name_ar AS service_name, c.whatsapp AS customer_whatsapp
       FROM ratings r JOIN orders o ON o.id = r.order_id
       JOIN technicians t ON t.id = r.technician_id JOIN services s ON s.id = o.service_id
@@ -190,6 +194,34 @@ async function addTechnician(req) {
     if (pgCode(e) === "23503") throw new HttpError(400, "الخدمة غير موجودة.");
     throw e;
   }
+}
+
+async function updateTechnician(id, req) {
+  const { name, serviceId, whatsapp } = await body(req);
+  const n = String(name || "").trim();
+  if (!n) throw new HttpError(400, "اكتب اسم الفني.");
+  if (!isQatarMobile(whatsapp)) throw new HttpError(400, "رقم واتساب غير صحيح. 8 أرقام تبدأ بـ 3 أو 5 أو 6 أو 7.");
+  try {
+    const rows = await db().sql`
+      UPDATE technicians SET name = ${n.slice(0, 100)}, whatsapp = ${whatsapp}, service_id = ${serviceId}
+       WHERE id = ${id} RETURNING id`;
+    if (!rows.length) throw new HttpError(404, "الفني غير موجود.");
+    return { ok: true };
+  } catch (e) {
+    if (pgCode(e) === "23505") throw new HttpError(409, "هذا الرقم مسجّل لفني آخر في نفس الخدمة.");
+    if (pgCode(e) === "23503") throw new HttpError(400, "الخدمة غير موجودة.");
+    throw e;
+  }
+}
+
+async function updateRating(id, req) {
+  const b = await body(req);
+  const c = score(b.costScore, "التكلفة"), q = score(b.qualityScore, "الجودة"), s = score(b.speedScore, "سرعة الاستجابة");
+  const rows = await db().sql`
+    UPDATE ratings SET cost_score = ${c}, quality_score = ${q}, speed_score = ${s}
+     WHERE id = ${id} RETURNING id`;
+  if (!rows.length) throw new HttpError(404, "التقييم غير موجود.");
+  return { ok: true };
 }
 
 async function setActive(table, id, req) {
@@ -256,6 +288,8 @@ export default async (req) => {
       if (adminLists[b] && !c && m === "GET") return json(await adminLists[b]());
       if (b === "technicians" && !c && m === "POST") return json(await addTechnician(req), 201);
       if ((b === "technicians" || b === "services") && c && m === "PATCH") return json(await setActive(b, id(2), req));
+      if (b === "technicians" && c && m === "PUT") return json(await updateTechnician(id(2), req));
+      if (b === "ratings" && c && m === "PATCH") return json(await updateRating(id(2), req));
       if (b === "technicians" && c && m === "DELETE") return json(await deleteTechnician(id(2)));
     }
     throw new HttpError(404, "المسار غير موجود.");

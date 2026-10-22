@@ -9,6 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Readex+Pro:wght@500;600;700&family=IBM+Plex+Sans+Arabic:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="/styles.css">
+<script src="/stars.js"></script>
 </head>
 <body>
 <header class="bar">
@@ -234,7 +235,7 @@ function renderList(){
     <a class="btn wa" href="https://wa.me/974${esc(rt.whatsapp)}" target="_blank" rel="noopener" data-contact="${esc(rt.id)}">${waIcon} فتح واتساب</a></div>` : "";
   if(!TECHS){ $("#techs").innerHTML=`<div class="card loading">جارٍ تحميل الفنيين…</div>`; return; }
   $("#techs").innerHTML = TECHS.length? TECHS.map((t,i)=>{
-    const scores=["cost","quality","speed"].map(k=>{const v=t[FIELD[k]];return `<div class="score ${k===state.sort?"on":""}"><span class="lbl">${CRIT[k]}</span><span class="val">${fmt(v)} <span class="hint">/ 5</span></span><div class="meter"><i style="width:${v?v/5*100:0}%"></i></div></div>`;}).join("");
+    const scores=["cost","quality","speed"].map(k=>{const v=t[FIELD[k]];return `<div class="score ${k===state.sort?"on":""}"><span class="lbl">${CRIT[k]}</span><span class="val">${fmt(v)} <span class="hint">/ 5</span></span>${starsInline(v)}</div>`;}).join("");
     return `<article class="card tech">
       <div class="rank">${i+1}</div>
       <div class="who"><b>${esc(t.name)}</b><span>${showPhone(t.whatsapp)}</span><div class="hint">${t.ratings? t.ratings+" تقييم":"لا توجد تقييمات بعد"}</div></div>
@@ -268,15 +269,12 @@ function renderReqs(el, list){
 document.addEventListener("click",e=>{const b=e.target.closest("[data-rate]"); if(b) openRate(b.dataset.rate);});
 
 /* ---------- rating ---------- */
-$("#likerts").innerHTML=["cost","quality","speed"].map(k=>`
-  <fieldset class="likert" style="border:0;padding:0;margin:0 0 12px">
-    <legend class="q">${STATEMENTS[k]} <span class="hint">(تقييم ${CRIT[k]})</span></legend>
-    <div class="opts">${[1,2,3,4,5].map(v=>`<span><input type="radio" name="lk-${k}" id="lk-${k}-${v}" value="${v}"><label for="lk-${k}-${v}">${v}</label></span>`).join("")}</div>
-    <div class="ends"><span>1 لا أوافق بشدة</span><span>5 أوافق بشدة</span></div>
-  </fieldset>`).join("");
+$("#likerts").innerHTML=["cost","quality","speed"].map(k=>starPicker("st-"+k, STATEMENTS[k], "تقييم "+CRIT[k])).join("")
+  + `<p class="hint" style="margin:0">نجمة واحدة = لا أوافق بشدة · خمس نجوم = أوافق بشدة</p>`;
+bindStars($("#likerts"));
 function openRate(id){
   const o=ORDERS.find(x=>x.id===id); if(!o) return;
-  state.rateId=id; $("#rate-form").reset(); $("#r-err").textContent="";
+  state.rateId=id; $("#rate-form").reset(); ["cost","quality","speed"].forEach(k=>setStars("st-"+k,0)); $("#r-err").textContent="";
   $("#rate-sub").textContent=o.technician.name+" · "+o.serviceName;
   $("#rate").hidden=false; $("#r-cost").focus();
 }
@@ -287,10 +285,10 @@ document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("#rate").hidden)
 $("#rate-form").onsubmit=async e=>{
   e.preventDefault();
   const cost=parseFloat($("#r-cost").value);
-  const v=k=>{const x=document.querySelector(`input[name="lk-${k}"]:checked`);return x?+x.value:null;};
+  const v=k=>checkedStars("st-"+k)||null;
   const costScore=v("cost"),qualityScore=v("quality"),speedScore=v("speed");
   if(!(cost>=0)) return $("#r-err").textContent="اكتب التكلفة بالريال.";
-  if(!costScore||!qualityScore||!speedScore) return $("#r-err").textContent="اختر تقييماً من 1 إلى 5 لكل عنصر.";
+  if(!costScore||!qualityScore||!speedScore) return $("#r-err").textContent="اختر عدد النجوم لكل عنصر من العناصر الثلاثة.";
   $("#r-submit").disabled=true;
   try{
     await api(`orders/${state.rateId}/complete`,{method:"POST",auth:true,body:{cost,costScore,qualityScore,speedScore}});
